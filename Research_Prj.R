@@ -277,7 +277,245 @@ leaflet(map_data_SE) %>%
 library(dplyr)
 library(sp)
 SE_df <- bind_rows(FL_df, SC_df, NC_df, GA_df)
+View(SE_df)
 
 # To clean data and remove unwanted features for modeling 
+SE_df <- SE_df %>% select(-c(locationOfContents, amountPaidOnContentsClaim, amountPaidOnIncreasedCostOfComplianceClaim,
+  rateMethod, totalContentsInsuranceCoverage, primaryResidenceIndicator, 
+  buildingDamageAmount, contentsDamageAmount, netContentsPaymentAmount, 
+  contentsPropertyValue, disasterAssistanceCoverageRequired, floodCharacteristicsIndicator,
+  floodWaterDuration, iccCoverage, netIccPaymentAmount, replacementCostBasis,
+  stateOwnedIndicator, waterDepth, rentalPropertyIndicator, reportedZipCode,
+  censusTract, censusBlockGroupFips, latitude, longitude, agricultureStructureIndicator,
+  asOfDate, basementEnclosureCrawlspaceType, crsClassificationCode, dateOfLoss,
+  elevationCertificateIndicator, elevationDifference, baseFloodElevation, houseWorship))
+
+SE_df <- SE_df %>% select(-c(
+  buildingDescriptionCode, 
+  reportedCity,
+  elevatedBuildingIndicator, 
+  lowestAdjacentGrade,
+  lowestFloorElevation,
+  nonProfitIndicator,
+  obstructionType,
+  occupancyType,
+  originalConstructionDate,
+  originalNBDate,
+  postFIRMConstructionIndicator,
+  buildingDeductibleCode,
+  smallBusinessIndicatorBuilding,
+  condominiumCoverageTypeCode,
+  contentsDeductibleCode,
+  eventDesignationNumber,
+  ficoNumber,
+  nfipRatedCommunityNumber,
+  nfipCommunityName,
+  nonPaymentReasonContents,
+  nonPaymentReasonBuilding,
+  buildingReplacementCost,
+  contentsReplacementCost,
+  countyCode,
+  id
+))
+SE_df <- SE_df %>% select(-c(
+  ratedFloodZone,
+  nfipCommunityNumberCurrent
+))
+
+#Intial look at data set 
+summary(SE_df) 
+
+#Large number of Nas in buildingpropertyvalue and amount paid on buildings claims
+#amount paid on building claims NAs are really 0, so will convert NAs in this column as 0
+library(dplyr)
+SE_df <- SE_df %>% mutate(amountPaidOnBuildingClaim = ifelse(
+  is.na(amountPaidOnBuildingClaim), 0, amountPaidOnBuildingClaim))
+SE_df <- SE_df %>% select(-c(
+  netBuildingPaymentAmount
+))
+
+#To handle missing values in buildingpropertyvalue 
+#Will fill values using median 
+SE_df$buildingPropertyValue[is.na(SE_df$buildingPropertyValue)] <- median(SE_df$buildingPropertyValue, na.rm=TRUE)
+# To remove negative values in property values 
+SE_df <- SE_df[SE_df$buildingPropertyValue > 0, ]
+# Exclude 0 claims paid 
+SE_df <- SE_df[SE_df$amountPaidOnBuildingClaim > 0,]
+# Now to look at distribution of amount paid in claims 
+library(ggplot2)
+ggplot(data=SE_df, aes(x = amountPaidOnBuildingClaim))+ # Eurika a right taled distribution
+  geom_histogram(fill="lightblue")+
+  xlim(0,1.0e06)+
+  ylim(0,1e05)
+# Need to remove extreme outliers 
+library(dplyr)
+SE_df$amountPaidOnBuildingClaim = replace(
+  SE_df$amountPaidOnBuildingClaim, SE_df$amountPaidOnBuildingClaim > quantile(SE_df$amountPaidOnBuildingClaim, .99), NA)
+# Now to look at dsitribution 
+library(ggplot2)
+ggplot(data=SE_df, aes(x = amountPaidOnBuildingClaim))+ # Eurika a right taled distribution
+  geom_histogram(fill="lightblue")+
+  xlim(0,1.0e06)+
+  ylim(0,1e05)
+# To assess categorical data 
+# TO assess flood zone
+library(ggplot2)
+ggplot(data=SE_df, aes(x=floodZoneCurrent, fill=floodZoneCurrent, color=floodZoneCurrent))+
+  geom_bar(position="identity", alpha=0.5)
+# Data has high variability with majority NAs 
+# Will drop this column
+library(dplyr)
+SE_df <- SE_df %>% select(-c(
+  floodZoneCurrent
+))
+# Now to look at flood event 
+library(ggplot2)
+ggplot(data=SE_df, aes(x=floodEvent, fill=floodEvent, color=floodEvent))+
+  geom_bar(position="identity", alpha=0.5)
+# data looks normally distrbuted 
+# Will be log transforming the claim cost target feature, so this is fine 
+# Wil fill NAs with mode 
+
+summary(SE_df)
+
+library(dplyr)
+
+SE_df <- SE_df%>%
+  mutate(floodEvent=if_else(is.na(floodEvent), "Hurricane Helene", floodEvent))
+
+# Now to look at distribution 
+library(ggplot2)
+ggplot(data=SE_df, aes(x=floodEvent, fill=floodEvent, color=floodEvent))+
+  geom_bar(position="identity", alpha=0.5)
+# Looks fairly normal when replaced with mode, Hurricane Helen
+# Quick look at distribution of data to state 
+library(ggplot2)
+ggplot(data=SE_df, aes(x=state, fill=state, color=state))+
+  geom_bar(position="identity", alpha=0.5)
+# Florida is the majority count of claims 
+# Now we need to look at data types and see what may be wrong 
+str(SE_df) # Cause of damage is a character not int type 
+SE_df$causeOfDamage <- as.numeric(SE_df$causeOfDamage)
+str(SE_df)
+### Now to add average wind speed based on hurricane as a new column 
+library(dplyr)
+SE_df <- SE_df %>%
+  mutate(max_wind_speed=case_when(
+    floodEvent == "April Florida Flooding" ~ 26.5,
+    floodEvent == "Blizzard of 1993" ~ 110,
+    floodEvent == "December Nor'easter" ~ 39,
+    floodEvent == 'Early winter storms' ~ 53,
+    floodEvent == 'Flooding' ~ 19,
+    floodEvent == 'Fort Lauderdale Flooding' ~ 35,
+    floodEvent == 'Hurricane Alex' ~ 70,
+    floodEvent == 'Hurricane Andrew' ~ 165,
+    floodEvent == 'Hurricane Bertha' ~ 105,
+    floodEvent == 'Hurricane Bonnie' ~ 85,
+    floodEvent == 'Hurricane Charley' ~ 150,
+    floodEvent == 'Hurricane Cindy' ~ 75,
+    floodEvent == 'Hurricane Debby' ~ 80,
+    floodEvent == 'Hurricane Dennis' ~ 150,
+    floodEvent == 'Hurricane Diana' ~ 130,
+    floodEvent == 'Hurricane Earl' ~ 110,
+    floodEvent == 'Hurricane Elana' ~ 125,
+    floodEvent == 'Hurricane Elsa' ~ 85,
+    floodEvent == 'Hurricane Emily' ~ 160,
+    floodEvent == 'Hurricane Eta' ~ 150,
+    floodEvent == 'Hurricane Florence' ~ 150,
+    floodEvent == 'Hurricane Floyd' ~ 155,
+    floodEvent == 'HUrricane Fran' ~ 120,
+    floodEvent == 'Hurricane Frances' ~ 145,
+    floodEvent == 'Hurricane Francine' ~ 100,
+    floodEvent == 'Hurricane Georges (Keys)' ~ 105,
+    floodEvent == 'Hurricane Georges (Panhandle)' ~ 65,
+    floodEvent == 'Hurricane Gloria' ~ 145,
+    floodEvent == 'Hurricane Gordon' ~ 67,
+    floodEvent == 'Hurricane Hanna' ~ 85,
+    floodEvent == 'Hurricane Helene' ~ 140,
+    floodEvent == 'Hurricane Hermine' ~ 80,
+    floodEvent == 'Hurricane Hugo' ~ 138,
+    floodEvent == 'Hurricane Ian' ~ 155,
+    floodEvent == 'Hurricane Idalia' ~ 134,
+    floodEvent == 'Hurricane Ike' ~ 110,
+    floodEvent == 'Hurricane Irene' ~ 115,
+    floodEvent == 'Hurricane Irma' ~ 142,
+    floodEvent == 'Hurricane Issac' ~ 80,
+    floodEvent == 'Hurricane Isabel' ~ 165,
+    floodEvent == 'Hurricane Isaias' ~ 85,
+    floodEvent == 'Hurricane Ivan' ~ 120,
+    floodEvent == 'Hurricane Jeanne' ~ 120,
+    floodEvent == 'Hurricane Josephine' ~ 105,
+    floodEvent == 'Hurricane Kate' ~ 120,
+    floodEvent == 'Hurricane Katrina' ~ 175,
+    floodEvent == 'Hurricane Matthew' ~ 120,
+    floodEvent == 'Hurricane Michael' ~ 160,
+    floodEvent == 'Hurricane Milton' ~ 180,
+    floodEvent == 'Hurricane Nicole' ~ 75,
+    floodEvent == 'Hurricane Opal' ~ 115,
+    floodEvent =='Hurricane Ophelia' ~ 70,
+    floodEvent == 'Hurricane Sally' ~ 103,
+    floodEvent =='Hurricane Sandy' ~ 75,
+    floodEvent == 'Hurricane Wilma' ~ 185,
+    floodEvent == 'Hurricane Zeta' ~ 110,
+    floodEvent == 'June South Florida Flooding' ~ 14,
+    floodEvent == 'Late summer storms' ~ 58,
+    floodEvent == 'Low pressure system' ~ 20,
+    floodEvent == 'Mid-spring storms' ~ 14,
+    floodEvent == 'October severe storms' ~ 80,
+    floodEvent == 'Sever Storms and Flooding' ~ 60,
+    floodEvent == "The 'No-Name Storm'" ~ 39,
+    floodEvent == 'The "Halloween" Storm' ~ 18,
+    floodEvent == 'Torrential rain' ~ 100,
+    floodEvent == 'Tropical Cyclone Eight' ~ 45,
+    floodEvent == 'Tropical Storm Alberto' ~ 50,
+    floodEvent == 'Tropical Storm Alex' ~ 70,
+    floodEvent == 'Tropical Storm Allison' ~ 60,
+    floodEvent == 'Tropical Storm Barry' ~ 75,
+    floodEvent == 'Tropical Storm Claudette' ~ 81,
+    floodEvent == 'Tropical Storm Debby' ~ 80,
+    floodEvent == 'Tropical Storm Ernesto' ~ 60,
+    floodEvent == 'Tropical Storm Fay' ~ 65,
+    floodEvent == 'Tropical Storm Fred' ~ 65,
+    floodEvent == 'Tropical Storm Isidore' ~ 127,
+    floodEvent == 'Tropical Storm Ivan' ~ 168,
+    floodEvent == 'Tropical Storm Mitch' ~ 180,
+    floodEvent == 'Tropical Storm Nicholas' ~ 75,
+    floodEvent == 'Tropical Storm Ophelia' ~ 70
+  )) 
+str(SE_df)
+# Distribution of cause of damage 
+library(ggplot2)
+ggplot(SE_df, aes(x = causeOfDamage))+
+  geom_density(fill="lightblue", alpha = 0.5)+
+  theme_minimal()
+# Same for number of floors
+library(ggplot2)
+ggplot(SE_df, aes(x = numberOfFloorsInTheInsuredBuilding))+
+  geom_density(fill="lightblue", alpha = 0.5)+
+  theme_minimal()+
+  xlim(-1,7)
+# totalBuildingInsurancecoverage
+library(ggplot2)
+ggplot(SE_df, aes(x = totalBuildingInsuranceCoverage))+
+  geom_density(fill="lightblue", alpha = 0.5)+
+  theme_minimal()+
+  xlim()
+# fairly normal 
+# Count of number of units
+install.packages("tidyverse")
+library(tidyverse)
+SE_df %>% count(numberOfUnits)
+# Same for number of floors 
+library(tidyverse)
+SE_df %>% count(numberOfFloorsInTheInsuredBuilding)
+# Both are left tailed looking like gamma distributions
+# Correlation plot of numeric variables, particularly to target variable 
+
+#######################################################
+### Time to create the model
+#######################################################
 
 
+  
+  
+  
