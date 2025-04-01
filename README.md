@@ -11,7 +11,7 @@ Current Progress:
 
 ✅ Initial feature engineering
 
-🔄 Handling missing data using Multiple Imputation (MI), Maximum Likelihood (ML), and Monte Carlo Likelihood Estimation (MCLE)
+🔄 Handling missing data, adding additional features, managing data types, and examing outliers
 
 🔄 Building and evaluating claim severity models
 
