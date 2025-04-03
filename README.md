@@ -11,9 +11,9 @@ Current Progress:
 
 ✅ Initial feature engineering
 
-🔄 Handling missing data, adding additional features, managing data types, and examing outliers
+✅ Handling missing data, adding additional features, managing data types, and examing outliers
 
-🔄 Building and evaluating claim severity models
+✅ Building and evaluating claim severity models
 
 Next Steps:
 
