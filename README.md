@@ -15,10 +15,4 @@ Current Progress:
 
 ✅ Building and evaluating claim severity models
 
-Next Steps:
-
-    Fine-tune predictive model using GLM
-    Validate and interpret model results
-    Visualize findings with R-based dashboards
-
 🚧 Note: This project is a work in progress, and updates will be added as analysis progresses. Contributions and feedback are welcome!
